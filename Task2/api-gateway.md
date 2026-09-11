@@ -36,6 +36,8 @@
 
 ![request-flow](./diagrams/api-gateway-request-flow.svg)
 
+![sequence](./diagrams/hot-path-sequence.svg)
+
 ## Выбор API Gateway
 
 Как утверждалось выше, API Gateway разделен на 2 слоя.

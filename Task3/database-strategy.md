@@ -18,6 +18,23 @@
 
 **Примечание**: БД для сервиса кампаний (Campaign Service) и для сервиса финансов (Financial Service) — PostgreSQL. В рамках целевой архитектуры данные кампаний и финансов физически разделены на разные инстансы PostgreSQL, даже если сами сервисы пока остаются в Legacy монолите и не вынесены по отдельным микросервисам посредством паттерна **Strangler Fig**. Это необходимо для независимого масштабирования и изоляции нагрузки.
 
+## Диаграмма данных
+
+| Сущность | Сервис-владелец | База данных |
+| -- | -- | -- |
+| Campaign | Campaign Service | PostgreSQL |
+| Creative | Campaign Service | PostgreSQL |
+| BidRule | Campaign Service | PostgreSQL |
+| Event | Statistics Service | ClickHouse |
+| Transaction | Financial Service | PostgreSQL |
+| CachedCampaign | Bidding Service | Redis |
+
+![ER-diagram](./diagrams/er.svg)
+
+**Важно**: так как владение сущностями разносится по разным сервисам, то связи не должны иметь **Foreign Key (FK)**, связи между пакетами становятся логическими по ID.
+
+Стрелка в Redis отмечена пунктирной линией, т.к. происходит материализация через CDC, а не напрямую.
+
 ## Итоговая стратегия хранения данных
 
 | Характер нагрузки | База данных | Сервисы |

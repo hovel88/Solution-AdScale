@@ -1,0 +1,72 @@
+@startuml
+title ER Diagram — AdScale Data Model (Database per Service)
+
+package "Campaign Service (PostgreSQL)" {
+  entity "Campaign" as campaign {
+    * id : UUID <<PK>>
+    --
+    advertiser_id : UUID <<FK>>
+    name : string
+    status : enum
+    budget_limit : decimal
+    version : int
+  }
+
+  entity "Creative" as creative {
+    * id : UUID <<PK>>
+    --
+    campaign_id : UUID <<FK>>
+    type : enum
+    content_url : string
+  }
+
+  entity "BidRule" as bid_rule {
+    * id : UUID <<PK>>
+    --
+    campaign_id : UUID <<FK>>
+    base_bid : decimal
+    max_bid : decimal
+  }
+}
+
+package "Statistics / Analytics (ClickHouse)" {
+  entity "Event" as event {
+    * event_id : UUID <<PK>>
+    --
+    campaign_id : UUID
+    creative_id : UUID
+    event_type : enum
+    timestamp : timestamp
+    price : decimal
+  }
+}
+
+package "Financial Service (PostgreSQL)" {
+  entity "Transaction" as transaction {
+    * id : UUID <<PK>>
+    --
+    campaign_id : UUID
+    event_id : UUID
+    amount : decimal
+    status : enum
+  }
+}
+
+package "Bidding Service (Redis)" {
+  entity "CachedCampaign" as cached {
+    * campaign_id : UUID <<PK>>
+    --
+    budget_limit : decimal
+    targeting_rules : json
+    source_version : int
+  }
+}
+
+' Связи между сущностями (логические, не физические FK)
+campaign ||--o{ creative : "has"
+campaign ||--o{ bid_rule : "has"
+campaign ||--o{ event : "generates (по campaign_id)"
+event ||--o| transaction : "billing (по event_id)"
+campaign ..> cached : "материализуется через CDC"
+
+@enduml

@@ -1,0 +1,28 @@
+@startuml
+title Hot Path — RTB Request with Failover
+
+participant "DSP" as dsp
+participant "API Gateway" as gw
+participant "Bidding Service" as bs
+participant "Redis" as r
+
+dsp -> gw : Bid Request (HTTPS/OpenRTB)
+activate gw
+gw -> bs : gRPC (Protobuf)
+activate bs
+
+alt Redis доступен (happy path)
+    bs -> r : GET Campaigns (timeout 5ms)
+    activate r
+    r --> bs : Campaign data
+    deactivate r
+    bs -> bs : Calculate bid (business rules)
+    bs --> gw : Bid Response (OK, price)
+else Redis timeout (failover)
+    bs --> gw : Bid Response (No Bid, timeout)
+end
+
+gw --> dsp : Bid Response (JSON)
+deactivate bs
+deactivate gw
+@enduml
