@@ -1,0 +1,57 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Sequence.puml
+
+title RTB Request Flow — API Gateway (Protocol Adapter)
+skinparam componentStyle rectangle
+
+
+actor "DSP" as dsp
+
+component "Load Balancer\n(L4/L7)" as lb
+
+' Edge Proxy (Envoy) - слой L4/L7
+component "Edge Proxy\n(Envoy)" as envoy
+
+' RTB Adapter - слой L4/L7
+component "RTB Adapter\n(Go/C++)" as adapter
+
+component "Bidding Service\n(C++/Go)" as bidding
+
+database "Redis\n(Campaigns\nCreatives\nRules)" as redis
+
+
+dsp -> lb : "HTTPS / OpenRTB\n(JSON)"
+lb -> envoy : "HTTPS / OpenRTB\nBid Request (JSON)"
+envoy -> adapter : "HTTP / OpenRTB\nBid Request (JSON)"
+adapter -> bidding : "gRPC / Bid Request"
+bidding -> redis : "In-Memory\n(Чтение кампаний)"
+bidding --> adapter : "gRPC / Bid Response"
+adapter --> envoy : "HTTP / OpenRTB\nBid Response (JSON)"
+envoy --> lb : "HTTPS / OpenRTB\nBid Request (JSON)"
+lb --> dsp : "HTTPS / OpenRTB (JSON)"
+
+
+note right of envoy
+  **Зона ответственности:**
+  - TLS Termination
+  - Auth (API Keys/JWT)
+  - Rate Limiting (Token Bucket)
+  - Circuit Breaker
+  - Метрики
+end note
+
+note right of adapter
+  **Зона ответственности:**
+  - Десериализация JSON
+  - Нормализация моделей DSP
+  - Сборка Protobuf
+  - Сериализация ответов
+  
+  **Stateless и легко масштабируются горизонтально**
+end note
+
+note bottom of bidding
+  **Stateless и легко масштабируются горизонтально**
+end note
+
+@enduml

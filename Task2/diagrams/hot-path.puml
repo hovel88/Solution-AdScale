@@ -1,0 +1,44 @@
+@startuml
+title Hot Path — Обработка RTB-запроса (Синхронный тракт)
+skinparam componentStyle rectangle
+
+actor "DSP-партнёр" as dsp
+actor "Пользователь" as user
+
+component "Load Balancer" as lb
+component "API Gateway" as gw
+component "Bidding Service" as bidding
+component "Delivery Service" as delivery
+database "Redis" as redis
+
+' Входящий поток ставки
+dsp -> lb : **1. Bid Request**\nHTTPS / OpenRTB (JSON)
+lb -> gw : 2. Проксирование
+gw -> bidding : 3. gRPC / Protobuf
+bidding -> redis : 4. Чтение кампаний\nIn-Memory
+bidding --> gw : 5. Bid Response
+gw --> lb : 6. Ответ
+lb --> dsp : **7. Bid Response**\nHTTPS / OpenRTB (JSON)
+
+' Поток показа рекламы
+user -> lb : **8. Запрос рекламы**\nHTTPS
+lb -> delivery : 9. Проксирование
+delivery -> bidding : 10. gRPC / GetAdDecision
+bidding --> delivery : 11. Данные победителя
+delivery --> lb : 12. HTML/JS разметка
+lb --> user : **13. Показ рекламы**
+
+note right of gw
+  **API Gateway**
+  (Envoy + RTB Adapter)
+  Преобразует JSON в Protobuf
+  и обратно.
+end note
+
+note right of bidding
+  **Bidding Service**
+  Не обращается к PostgreSQL.
+  Только Redis (Cache).
+end note
+
+@enduml

@@ -1,0 +1,43 @@
+@startuml
+title Data Path — Обработка событий (Асинхронный тракт)
+skinparam componentStyle rectangle
+
+actor "Пользователь" as user
+
+component "Load Balancer" as lb
+component "Delivery Service" as delivery
+component "Event Processing" as event_proc
+queue "Kafka" as kafka
+database "ClickHouse" as ch
+component "Analytics Service" as analytics
+
+' Событие показа из Delivery
+delivery -> event_proc : **1. Событие показа**\ngRPC / Protobuf (Async)
+
+' События кликов напрямую от пользователя
+user -> lb : **2. Клик/пиксель**\nHTTPS
+lb -> event_proc : 3. Проксирование
+
+' Публикация в Kafka
+event_proc -> kafka : 4. Публикация событий\nKafka Protocol
+
+' Запись в ClickHouse
+kafka -> ch : 5. Пакетная запись\nKafka Connect
+
+' Аналитика
+analytics -> ch : 6. Аналитические запросы\nSQL / HTTP
+
+note right of kafka
+  **Буферизация и развязка**
+  События хранятся на диске,
+  потребители сами решают,
+  когда их забирать.
+end note
+
+note right of ch
+  **Отдельное хранилище**
+  OLAP-запросы не конкурируют
+  с OLTP-нагрузкой.
+end note
+
+@enduml

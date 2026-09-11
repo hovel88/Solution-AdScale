@@ -1,0 +1,71 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+LAYOUT_TOP_DOWN()
+LAYOUT_WITH_LEGEND()
+
+title C4 Container Diagram — AdScale Target State (TO-BE)
+
+System_Boundary(actors, "Пользователи платформы") {
+  Person_Ext(endUser, "Пользователь", "Видит рекламу")
+  Person(advertiser, "Рекламодатель", "Управляет кампаниями")
+  System_Ext(dsp, "DSP-партнёр", "RTB")
+  System_Ext(pay, "Payment Gateway", "Платёжная система")
+}
+
+System_Boundary(adscale, "AdScale Platform") {
+
+    Container(nlb, "Load Balancer", "NGinx/Traefic", "Балансировка входящего трафика, базовая маршрутизация")
+
+    ' ================= Группа: Hot Path (RTB) =================
+    System_Boundary(hotpath, "Critical Path (Low Latency)") {
+        Container(api_gateway, "API Gateway", "Envoy", "Routing, Rate Limiting, Auth, JWT")
+        Container(bidding, "Bidding Service", "C++/Go", "Обработка ставок, RTB auction")
+        Container(redis, "Redis Cache", "Redis", "Кэш кампаний и ставок")
+    }
+
+    ' ================= Группа: Data Path (Events) =================
+    System_Boundary(datapath, "Event Processing (Async)") {
+        Container(event_proc, "Event Processing", "Go", "Приём кликов и показов. Обработка событий на основе параметров URL (без синхронных запросов в БД)")
+        Container(kafka, "Kafka", "Message Broker", "Буфер событий")
+        Container(clickhouse, "ClickHouse", "БД аналитики", "Хранение событий")
+    }
+
+    ' ================= Группа: Legacy =================
+    System_Boundary(legacy, "Legacy Monolith") {
+        Container(delivery, "Delivery Service", "Node.js", "Формирование рекламного ответа (HTML/JS), использует данные из Bidding Service (без прямого доступа к PostgreSQL)")
+        Container(analytics, "Analytics Service", "Python", "Аналитические отчеты")
+        Container(adCabinet, "Advertiser Dashboard", "Node.js + JavaScript", "Web UI: управление кампаниями, отчётность")
+        Container(financial, "Financial Service", "Go", "Списание средств, выставление счетов, управление балансами")
+        ContainerDb(postgres, "PostgreSQL", "Relational DB", "Финансы, профили, кампании")
+    }
+}
+
+
+' ====================== Связи (Hot Path) ======================
+Rel_D(dsp, nlb, "Bid Request/Response", "HTTPS/OpenRTB")
+Rel(nlb, api_gateway, "Bid Request/Response", "HTTPS/OpenRTB")
+Rel(api_gateway, bidding, "Маршрутизация ставки", "gRPC")
+Rel(bidding, redis, "Чтение данных кампаний", "In-Memory")
+
+' ====================== Связи (Cache Sync) ======================
+Rel(postgres, redis, "Прогрев кэша (Cache Warming)", "Async/CDC")
+
+' ====================== Связи (Data Path) ======================
+Rel_D(endUser, nlb, "Показ рекламы", "HTTPS")
+Rel(nlb, delivery, "Конструирование разметки на странице", "HTTPS")
+Rel(nlb, event_proc, "События кликов", "HTTPS")
+Rel(delivery, bidding, "Запрос данных победителя и креатива", "gRPC/Protobuf")
+Rel(delivery, event_proc, "Отправка события о показе", "Async/gRPC")
+Rel(event_proc, kafka, "Публикация событий", "Binary/Protobuf")
+Rel(kafka, clickhouse, "Пакетная запись (Batch Inserts)", "Kafka Connect")
+Rel(analytics, clickhouse, "Аналитические запросы", "SQL")
+
+' ====================== Связи (Legacy) ======================
+Rel_D(advertiser, nlb, "Управление кампаниями", "HTTPS")
+Rel(nlb, adCabinet, "Управление кампаниями", "HTTPS")
+Rel_D(advertiser, nlb, "Просмотр аналитических отчетов", "HTTPS")
+Rel(nlb, analytics, "Просмотр аналитических отчетов", "HTTPS")
+Rel(adCabinet, postgres, "Транзакции", "SQL")
+Rel_U(financial, pay, "Транзакции с бюджетом", "HTTPS/REST")
+@enduml
